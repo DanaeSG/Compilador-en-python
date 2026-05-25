@@ -1,42 +1,60 @@
 // src/analizador_semantico.rs
 // ------------------------------------------------------------------------------
-//  PUNTOS NEURÁLGICOS IMPLEMENTADOS
+//  PUNTOS NEURÁLGICOS DE SEMÁNTICA
 //
-//  PN-1  Al entrar a <Programa>
-//        - Crear DirectorioFunciones con el nombre del programa.
-//        - Registrar variables globales en el ámbito global.
+//  PN-S1  <Programa> start
+//         - Crear DirectorioFunciones(programa.nombre).
 //
-//  PN-2  Al entrar a cada <FUNC>
-//        - Verificar que la función no esté doblemente declarada.
-//        - Registrar la función (tipo retorno + params) en el Directorio.
-//        - Registrar variables locales de la función.
+//  PN-S2  Tabla global
+//         - Crear y vincular la tabla global al programa.
 //
-//  PN-3  En <ASIGNA>: id = <EXPRESION>
-//        - Verificar que 'id' esté declarada en el ámbito visible.
-//        - Inferir el tipo de la expresión derecha.
-//        - Consultar el cubo semántico con (op_izq, op_der, op).
+//  PN-S3  Conversión de tipos
+//         - Convertir tipo sintáctico -> TipoDato.
 //
-//  PN-4  En <EXPRESION> con operador relacional
-//        - Inferir tipos de ambos <EXP>.
-//        - Consultar cubo con (op_izq, op_der, op).
+//  PN-S4  <VARS> globales
+//         - Validar doble declaración e insertar en global.
 //
-//  PN-5  En <EXP> / <TERMINO> con operadores aritméticos
-//        - Inferir tipos de operandos.
-//        - Consultar cubo con (op_izq, op_der, op).
+//  PN-S5  <FUNC> pre-registro
+//         - Preparar el directorio para añadir la función.
 //
-//  PN-6  En <FACTOR> con Id
-//        - Verificar que el identificador esté declarado en ámbito visible.
-//        - Devolver su tipo para la inferencia ascendente.
+//  PN-S6  <FUNC> registro
+//         - Validar duplicados, guardar retorno y firma.
 //
-//  PN-7  En <LLAMADA> (dentro de expresión o estatuto)
-//        - Verificar que la función esté declarada.
-//        - Verificar aridad (número de argumentos).
-//        - Verificar tipo de cada argumento contra tipo del parámetro.
-//        - Devolver tipo de retorno de la función.
+//  PN-S7  Tabla local
+//         - Crear y vincular la tabla local a la función.
 //
-//  PN-8  En <CONDICION> y <CICLO>
-//        - Verificar que la expresión condicional produce un tipo válido
-//          (entero o flotante — no nula).
+//  PN-S8  <PARAMS>
+//         - Convertir tipo, validar duplicados, marcar es_param.
+//
+//  PN-S9  <VARS> locales
+//         - Convertir tipo, validar duplicados, insertar en local.
+//
+//  PN-S10 Fin de <FUNC>
+//         - Cierre conceptual (no-op).
+//
+//  PN-S11 <FACTOR> id
+//         - Resolver local -> global y retornar tipo.
+//
+//  PN-S12 <EXP> / <TERMINO>
+//         - Validar operación aritmética y retornar tipo.
+//
+//  PN-S13 <EXPRESION> relacional
+//         - Validar operación relacional y retornar tipo.
+//
+//  PN-S14 <ASIGNA>
+//         - Validar asignación con cubo semántico.
+//
+//  PN-S15 <LLAMADA>
+//         - Verificar existencia.
+//
+//  PN-S16 <LLAMADA>
+//         - Verificar aridad.
+//
+//  PN-S17 <LLAMADA>
+//         - Verificar tipo de cada argumento con cubo semántico.
+//
+//  PN-S18 <CONDICION> / <CICLO>
+//         - La condición no puede ser nula.
 // ------------------------------------------------------------------------------
 
 use crate::ast::*;
@@ -59,31 +77,41 @@ impl AnalizadorSemantico {
 
     //  Punto de entrada 
     pub fn analizar(&mut self, prog: &Programa) {
-        // PN-1: Inicializar directorio con el nombre del programa
+        // PN-S1: Inicializar directorio con el nombre del programa
         self.directorio = DirectorioFunciones::new(&prog.nombre);
+        println!("Analizando programa '{}'", prog.nombre);
 
-        // PN-1: Registrar variables globales
-        self.registrar_vars_en_ambito(&prog.vars, &prog.nombre);
+        // PN-S2: Crear tabla global (se crea en DirectorioFunciones::new)
+        // PN-S4: Registrar variables globales
+        self.registrar_globales(&prog.vars, &prog.nombre);
 
-        // PN-2: Registrar todas las funciones antes de analizar los cuerpos
-        //       (permite llamadas hacia adelante)
+        // PN-S5: Preparar directorio para nuevas funciones
+        // PN-S6: Registrar funciones antes de analizar cuerpos (llamadas hacia adelante)
         for func in &prog.funcs {
             self.registrar_funcion(func);
         }
 
-        // PN-2 (cont): Analizar cuerpos de funciones
+        // Analizar cuerpos de funciones
         for func in &prog.funcs {
             self.analizar_cuerpo(&func.cuerpo, &func.nombre);
+            // PN-S10: Cierre conceptual de ámbito
+            self.cerrar_funcion(&func.nombre);
         }
 
-        // PN-1 (cont): Analizar cuerpo principal
+        // Analizar cuerpo principal
         self.analizar_cuerpo(&prog.cuerpo, &prog.nombre);
     }
 
-    //  PN-1 / PN-2: Registrar variables en un ámbito 
+    // PN-S4: Registrar variables globales
+    fn registrar_globales(&mut self, decls: &[DeclVars], ambito: &str) {
+        self.registrar_vars_en_ambito(decls, ambito);
+    }
+
+    // PN-S4 / PN-S9: Registrar variables en un ámbito
     fn registrar_vars_en_ambito(&mut self, decls: &[DeclVars], ambito: &str) {
         for decl in decls {
-            let tipo = TipoDato::from_tipo(&decl.tipo);
+            // PN-S3: Convertir tipo sintáctico -> TipoDato
+            let tipo = self.convertir_tipo(&decl.tipo);
             for id in &decl.ids {
                 if let Err(e) = self.directorio.declarar_variable(ambito, id, tipo.clone()) {
                     self.errores.push(e);
@@ -92,21 +120,40 @@ impl AnalizadorSemantico {
         }
     }
 
-    //  PN-2: Registrar una función en el directorio 
+    // PN-S6 / PN-S7 / PN-S8 / PN-S9: Registrar una función en el directorio
     fn registrar_funcion(&mut self, func: &Funcion) {
-        let tipo_ret = TipoDato::from_tipo_func(&func.tipo_retorno);
-        let params: Vec<(String, TipoDato)> = func.params.iter()
-            .map(|p| (p.nombre.clone(), TipoDato::from_tipo(&p.tipo)))
-            .collect();
+        // PN-S3: Convertir tipo de retorno
+        let tipo_ret = self.convertir_tipo_func(&func.tipo_retorno);
+        // PN-S8: Preparar firma de parámetros (se registran al insertar la función)
+        let params = self.registrar_parametros(func);
 
+        // PN-S5: Preparar directorio para nueva función
+        // PN-S6: Registrar función y validar duplicados
+        // PN-S7: Crear tabla local y vincularla a la función
         match self.directorio.registrar_funcion(&func.nombre, tipo_ret, params) {
             Ok(()) => {
-                // Registrar vars locales dentro del ámbito de la función
-                self.registrar_vars_en_ambito(&func.vars, &func.nombre);
+                // PN-S9: Registrar variables locales dentro del ámbito
+                self.registrar_locales(&func.vars, &func.nombre);
             }
             Err(e) => self.errores.push(e),
         }
     }
+
+    // PN-S8: Preparar lista de parámetros
+    fn registrar_parametros(&self, func: &Funcion) -> Vec<(String, TipoDato)> {
+        func.params
+            .iter()
+            .map(|p| (p.nombre.clone(), self.convertir_tipo(&p.tipo)))
+            .collect()
+    }
+
+    // PN-S9: Registrar variables locales
+    fn registrar_locales(&mut self, decls: &[DeclVars], ambito: &str) {
+        self.registrar_vars_en_ambito(decls, ambito);
+    }
+
+    // PN-S10: Cerrar el ámbito local de la función (no-op)
+    fn cerrar_funcion(&mut self, _ambito: &str) {}
 
     //  Analizar lista de estatutos 
     fn analizar_cuerpo(&mut self, stmts: &[Estatuto], ambito: &str) {
@@ -119,29 +166,12 @@ impl AnalizadorSemantico {
     fn analizar_estatuto(&mut self, stmt: &Estatuto, ambito: &str) {
         match stmt {
 
-            // PN-3: Asignación
+            // PN-S14: Asignación
             Estatuto::Asigna(id, expr) => {
-                // tipo del lado izquierdo
-                let tipo_id = match self.directorio.resolver_variable(ambito, id) {
-                    Ok(t) => t,
-                    Err(e) => { self.errores.push(e); return; }
-                };
-                // tipo de la expresión derecha
-                let tipo_expr = match self.inferir_expresion(expr, ambito) {
-                    Ok(t) => t,
-                    Err(e) => { self.errores.push(e); return; }
-                };
-                // consultar cubo: (op_izq, op_der, op)
-                if let Err(_) = self.cubo.consultar(&tipo_id, &tipo_expr, &Operador::Asigna) {
-                    self.errores.push(ErrorSemantico::AsignacionTipoIncompatible {
-                        var:       id.clone(),
-                        var_tipo:  tipo_id.to_string(),
-                        expr_tipo: tipo_expr.to_string(),
-                    });
-                }
+                self.validar_asignacion(id, expr, ambito);
             }
 
-            // PN-8: Condición
+            // PN-S18: Condición
             Estatuto::Condicion { cond, entonces, sino } => {
                 self.verificar_cond_tipo(cond, ambito);
                 self.analizar_cuerpo(entonces, ambito);
@@ -150,13 +180,13 @@ impl AnalizadorSemantico {
                 }
             }
 
-            // PN-8: Ciclo
+            // PN-S18: Ciclo
             Estatuto::Ciclo { cond, cuerpo } => {
                 self.verificar_cond_tipo(cond, ambito);
                 self.analizar_cuerpo(cuerpo, ambito);
             }
 
-            // PN-7: Llamada como estatuto
+            // PN-S15/PN-S16/PN-S17: Llamada como estatuto
             Estatuto::Llamada(ll) => {
                 if let Err(e) = self.inferir_llamada(ll, ambito) {
                     self.errores.push(e);
@@ -178,7 +208,6 @@ impl AnalizadorSemantico {
         }
     }
 
-    //  PN-4: Inferir tipo de una Expresion 
     fn inferir_expresion(
         &mut self,
         expr: &Expresion,
@@ -189,42 +218,22 @@ impl AnalizadorSemantico {
             None => Ok(tipo_izq),
             Some((op_rel, exp_der)) => {
                 let tipo_der = self.inferir_exp(exp_der, ambito)?;
-                let op = match op_rel {
-                    OpRel::Gt   => Operador::Mayor,
-                    OpRel::Lt   => Operador::Menor,
-                    OpRel::EqEq => Operador::Igual,
-                    OpRel::Neq  => Operador::Diferente,
-                };
-                self.cubo.consultar(&tipo_izq, &tipo_der, &op)
-                    .map_err(|_msg| ErrorSemantico::TipoIncompatible {
-                        op:  format!("{:?}", op_rel),
-                        izq: tipo_izq.to_string(),
-                        der: tipo_der.to_string(),
-                    })
+                // PN-S13: Validar operación relacional
+                self.validar_operacion_relacional(op_rel, &tipo_izq, &tipo_der)
             }
         }
     }
 
-    //  PN-5: Inferir tipo de un Exp (suma/resta) 
     fn inferir_exp(&mut self, exp: &Exp, ambito: &str) -> Result<TipoDato, ErrorSemantico> {
         let mut tipo_acc = self.inferir_termino(&exp.termino, ambito)?;
         for (op_arit, term) in &exp.cont {
             let tipo_der = self.inferir_termino(term, ambito)?;
-            let op = match op_arit {
-                OpArit::Plus  => Operador::Suma,
-                OpArit::Minus => Operador::Resta,
-            };
-            tipo_acc = self.cubo.consultar(&tipo_acc, &tipo_der, &op)
-                .map_err(|_| ErrorSemantico::TipoIncompatible {
-                    op:  format!("{:?}", op_arit),
-                    izq: tipo_acc.to_string(),
-                    der: tipo_der.to_string(),
-                })?;
+            // PN-S12: Validar operación aritmética
+            tipo_acc = self.validar_operacion_aritmetica(op_arit, &tipo_acc, &tipo_der)?;
         }
         Ok(tipo_acc)
     }
 
-    //  PN-5: Inferir tipo de un Termino (mul/div) 
     fn inferir_termino(
         &mut self,
         term: &Termino,
@@ -233,21 +242,12 @@ impl AnalizadorSemantico {
         let mut tipo_acc = self.inferir_factor(&term.factor, ambito)?;
         for (op_mul, fac) in &term.cont {
             let tipo_der = self.inferir_factor(fac, ambito)?;
-            let op = match op_mul {
-                OpMul::Star  => Operador::Mul,
-                OpMul::Slash => Operador::Div,
-            };
-            tipo_acc = self.cubo.consultar(&tipo_acc, &tipo_der, &op)
-                .map_err(|_| ErrorSemantico::TipoIncompatible {
-                    op:  format!("{:?}", op_mul),
-                    izq: tipo_acc.to_string(),
-                    der: tipo_der.to_string(),
-                })?;
+            // PN-S12: Validar operación aritmética
+            tipo_acc = self.validar_operacion_mul_div(op_mul, &tipo_acc, &tipo_der)?;
         }
         Ok(tipo_acc)
     }
 
-    //  PN-6 / PN-7: Inferir tipo de un Factor 
     fn inferir_factor(
         &mut self,
         factor: &Factor,
@@ -259,19 +259,18 @@ impl AnalizadorSemantico {
                 Constante::Flotante(_) => TipoDato::Flotante,
             }),
 
-            // PN-6: Id simple
+            // PN-S11: Id simple
             Factor::Id(id) | Factor::PosId(id) | Factor::NegId(id) => {
-                self.directorio.resolver_variable(ambito, id)
+                self.resolver_identificador(ambito, id)
             }
 
             Factor::Paren(expr) => self.inferir_expresion(expr, ambito),
 
-            // PN-7: Llamada dentro de expresión
+            // PN-S15/PN-S16/PN-S17: Llamada dentro de expresión
             Factor::Llamada(ll) => self.inferir_llamada(ll, ambito),
         }
     }
 
-    //  PN-7: Validar llamada y devolver tipo de retorno 
     fn inferir_llamada(
         &mut self,
         ll: &Llamada,
@@ -285,9 +284,10 @@ impl AnalizadorSemantico {
             return Ok(TipoDato::Nula);
         }
 
+        // PN-S15: Verificar existencia de función
         let entrada = self.directorio.buscar_funcion(&ll.nombre)?.clone();
 
-        // Verificar aridad
+        // PN-S16: Verificar aridad
         if ll.args.len() != entrada.num_params {
             self.errores.push(ErrorSemantico::ArityMismatch {
                 funcion:   ll.nombre.clone(),
@@ -296,7 +296,7 @@ impl AnalizadorSemantico {
             });
         }
 
-        // Verificar tipo de cada argumento
+        // PN-S17: Verificar tipo de cada argumento
         for (i, (arg, tipo_param)) in
             ll.args.iter().zip(entrada.tipos_params.iter()).enumerate()
         {
@@ -320,7 +320,7 @@ impl AnalizadorSemantico {
         Ok(entrada.tipo_retorno.clone())
     }
 
-    //  PN-8: Verificar que condición no sea nula 
+    // PN-S18: Verificar que condición no sea nula
     fn verificar_cond_tipo(&mut self, cond: &Expresion, ambito: &str) {
         match self.inferir_expresion(cond, ambito) {
             Ok(TipoDato::Nula) => self.errores.push(ErrorSemantico::TipoIncompatible {
@@ -331,6 +331,111 @@ impl AnalizadorSemantico {
             Ok(_) => {}
             Err(e) => self.errores.push(e),
         }
+    }
+
+    // PN-S11: Resolver identificador en ámbito visible
+    fn resolver_identificador(
+        &self,
+        ambito: &str,
+        id: &str,
+    ) -> Result<TipoDato, ErrorSemantico> {
+        self.directorio.resolver_variable(ambito, id)
+    }
+
+    // PN-S12: Validar operación aritmética (+/-)
+    fn validar_operacion_aritmetica(
+        &self,
+        op_arit: &OpArit,
+        tipo_izq: &TipoDato,
+        tipo_der: &TipoDato,
+    ) -> Result<TipoDato, ErrorSemantico> {
+        let op = match op_arit {
+            OpArit::Plus => Operador::Suma,
+            OpArit::Minus => Operador::Resta,
+        };
+        self.cubo.consultar(tipo_izq, tipo_der, &op)
+            .map_err(|_| ErrorSemantico::TipoIncompatible {
+                op:  format!("{:?}", op_arit),
+                izq: tipo_izq.to_string(),
+                der: tipo_der.to_string(),
+            })
+    }
+
+    // PN-S12: Validar operación aritmética (*//)
+    fn validar_operacion_mul_div(
+        &self,
+        op_mul: &OpMul,
+        tipo_izq: &TipoDato,
+        tipo_der: &TipoDato,
+    ) -> Result<TipoDato, ErrorSemantico> {
+        let op = match op_mul {
+            OpMul::Star => Operador::Mul,
+            OpMul::Slash => Operador::Div,
+        };
+        self.cubo.consultar(tipo_izq, tipo_der, &op)
+            .map_err(|_| ErrorSemantico::TipoIncompatible {
+                op:  format!("{:?}", op_mul),
+                izq: tipo_izq.to_string(),
+                der: tipo_der.to_string(),
+            })
+    }
+
+    // PN-S13: Validar operación relacional
+    fn validar_operacion_relacional(
+        &self,
+        op_rel: &OpRel,
+        tipo_izq: &TipoDato,
+        tipo_der: &TipoDato,
+    ) -> Result<TipoDato, ErrorSemantico> {
+        let op = match op_rel {
+            OpRel::Gt => Operador::Mayor,
+            OpRel::Lt => Operador::Menor,
+            OpRel::EqEq => Operador::Igual,
+            OpRel::Neq => Operador::Diferente,
+        };
+        self.cubo.consultar(tipo_izq, tipo_der, &op)
+            .map_err(|_msg| ErrorSemantico::TipoIncompatible {
+                op:  format!("{:?}", op_rel),
+                izq: tipo_izq.to_string(),
+                der: tipo_der.to_string(),
+            })
+    }
+
+    // PN-S14: Validar asignación
+    fn validar_asignacion(&mut self, id: &str, expr: &Expresion, ambito: &str) {
+        let tipo_id = match self.directorio.resolver_variable(ambito, id) {
+            Ok(t) => t,
+            Err(e) => {
+                self.errores.push(e);
+                return;
+            }
+        };
+
+        let tipo_expr = match self.inferir_expresion(expr, ambito) {
+            Ok(t) => t,
+            Err(e) => {
+                self.errores.push(e);
+                return;
+            }
+        };
+
+        if let Err(_) = self.cubo.consultar(&tipo_id, &tipo_expr, &Operador::Asigna) {
+            self.errores.push(ErrorSemantico::AsignacionTipoIncompatible {
+                var:       id.to_string(),
+                var_tipo:  tipo_id.to_string(),
+                expr_tipo: tipo_expr.to_string(),
+            });
+        }
+    }
+
+    // PN-S3: Convertir tipo sintáctico -> TipoDato
+    fn convertir_tipo(&self, tipo: &Tipo) -> TipoDato {
+        TipoDato::from_tipo(tipo)
+    }
+
+    // PN-S3: Convertir tipo de retorno sintáctico -> TipoDato
+    fn convertir_tipo_func(&self, tipo: &TipoFunc) -> TipoDato {
+        TipoDato::from_tipo_func(tipo)
     }
 
     //  Resultado final 

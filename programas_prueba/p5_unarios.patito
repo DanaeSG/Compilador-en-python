@@ -1,0 +1,11 @@
+programa p5;
+vars a, b : entero;
+vars x : flotante;
+inicio {
+    a = 5;
+    b = -a;
+    x = 2.5;
+    x = -x;
+    a = +b;
+    b = -b + 1;
+} fin

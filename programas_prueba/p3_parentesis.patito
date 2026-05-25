@@ -1,0 +1,11 @@
+programa p3;
+vars a, b, c : entero;
+vars r : flotante;
+inicio {
+    a = 2;
+    b = 3;
+    c = 4;
+    r = (a + b) * c;
+    r = (a + b) * (c - 1);
+    r = (a + b) * (c - 1) / 2.0;
+} fin

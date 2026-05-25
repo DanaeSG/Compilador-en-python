@@ -1,0 +1,9 @@
+programa p4;
+vars a : entero;
+vars x : flotante;
+inicio {
+    a = 7;
+    x = 3.25;
+    escribe("a=", a, " x=", x);
+    escribe("sum=", a + 1, " div=", x / 2.0);
+} fin

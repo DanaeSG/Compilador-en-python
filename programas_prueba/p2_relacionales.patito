@@ -1,0 +1,14 @@
+programa p2;
+vars a, b, r : entero;
+vars x, y : flotante;
+inicio {
+    a = 2;
+    b = 5;
+    r = a < b;
+    x = 1.5;
+    y = 3.0;
+    r = x == y;
+    r = a > b;
+    r = a != b;
+    r = x < y;
+} fin

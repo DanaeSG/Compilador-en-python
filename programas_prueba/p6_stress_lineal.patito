@@ -1,0 +1,20 @@
+programa p6;
+vars a, b, c, d, e, r : entero;
+vars x, y, z : flotante;
+inicio {
+    a = 1;
+    b = 2;
+    c = 3;
+    d = 4;
+    e = 5;
+    x = 1.25;
+    y = 2.5;
+    z = 3.75;
+    r = (a + b) * (c + d) - e;
+    r = r / 2;
+    x = (x + y) * (z - 1.0) / 2.0 + 3.0;
+    r = a + b - c + d - e;
+    r = a * b + c * d - e;
+    r = (a + b + c + d + e) / 3;
+    escribe("r=", r, " x=", x);
+} fin

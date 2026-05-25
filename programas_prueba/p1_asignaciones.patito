@@ -1,0 +1,12 @@
+programa p1;
+vars a, b : entero;
+vars x, y : flotante;
+inicio {
+    a = 1;
+    b = a + 2 * 3;
+    x = 1.5;
+    y = x / 2.0;
+    a = a - 4;
+    x = x + 2.25;
+    y = (x + 1.0) * 3.0;
+} fin

@@ -4,6 +4,7 @@ pub mod lexer;
 pub mod ast;
 pub mod semantica;
 pub mod analizador_semantico;
+pub mod cuadruplos;
 lalrpop_util::lalrpop_mod!(pub gramatica, "/gramatica.rs");
 
 use lexer::Lexer;

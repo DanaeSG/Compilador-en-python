@@ -59,6 +59,7 @@ pub enum Operador {
 //  Representado como HashMap<(TipoDato, TipoDato, Operador), TipoDato>
 //  Ausencia de clave -> operación inválida (error semántico).
 
+#[derive(Debug, Clone)]
 pub struct CuboSemantico {
     tabla: HashMap<(TipoDato, TipoDato, Operador), TipoDato>,
 }
@@ -177,6 +178,7 @@ pub struct EntradaFuncion {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct DirectorioFunciones {
     pub funciones:  HashMap<String, EntradaFuncion>,
     pub nombre_prog: String,             // clave del ámbito global

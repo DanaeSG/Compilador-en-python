@@ -1,0 +1,11 @@
+programa p7;
+vars a : entero;
+vars x : flotante;
+inicio {
+    a = 7;
+    escribe("hola");
+    mientras (a < 10) haz {
+        escribe("loop a=", a);
+        a = a + 1;
+    };
+} fin
