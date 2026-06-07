@@ -217,10 +217,6 @@ class ObjectProgram:
 
 class VirtualMachine:
     """Interpreta cuádruplos usando memoria virtual dinámica.
-
-    Aunque el compilador puede invocarla directamente en memoria, el diseño
-    favorece también la carga desde `.obj` para desacoplar compilación y
-    ejecución y facilitar pruebas/depuración.
     """
 
     def __init__(
